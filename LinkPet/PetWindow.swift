@@ -30,7 +30,8 @@ class PetWindowV3: NSWindow, WKNavigationDelegate, WKScriptMessageHandler {
         self.backgroundColor = .clear
         self.hasShadow = false
         self.ignoresMouseEvents = false
-        self.collectionBehavior = [.canJoinAllSpaces, .stationary]
+        // Fix-Bug9: 移除 .stationary，保留拖动能力
+        self.collectionBehavior = [.canJoinAllSpaces]
         setupWebView()
         placeOnScreen()
     }
@@ -60,7 +61,8 @@ class PetWindowV3: NSWindow, WKNavigationDelegate, WKScriptMessageHandler {
         self.contentView = webView
 
         let html = buildPetHTML(initialKarma: karma)
-        webView.loadHTMLString(html, baseURL: nil)
+        let baseURL = URL(fileURLWithPath: NSHomeDirectory())
+        webView.loadHTMLString(html, baseURL: baseURL)
     }
 
     // MARK: - JS Bridge
@@ -157,7 +159,8 @@ class PetWindowV3: NSWindow, WKNavigationDelegate, WKScriptMessageHandler {
     // MARK: - 拖动
     override func mouseDown(with event: NSEvent) {
         let loc = event.locationInWindow
-        if loc.y > 60 {
+        // Fix-Bug10: 底部面板72px，拖动区域在 y > 72
+        if loc.y > 72 {
             isDragging = true
             dragStartWindowPos = self.frame.origin
             dragStartMousePos = NSEvent.mouseLocation

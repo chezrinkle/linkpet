@@ -12,7 +12,7 @@ return """
 html, body {
   width:200px; height:300px;
   background: transparent;
-  overflow: hidden;
+  overflow: visible;  /* Fix-Bug11: 允许气泡超出顶部 */
   -webkit-user-select: none;
   font-family: -apple-system, 'PingFang SC', sans-serif;
 }
@@ -25,6 +25,7 @@ html, body {
   display: flex;
   align-items: flex-end;
   justify-content: center;
+  overflow: visible;  /* Fix-Bug11: 允许气泡超出 */
 }
 
 /* ===== 招财猫 SVG ===== */
@@ -115,7 +116,8 @@ html, body {
 /* ===== 气泡 ===== */
 #bubble {
   position: absolute;
-  top: 4px; left: 50%;
+  /* Fix-Bug11: 气泡放在猫咪头部上方，不被帽子遮住 */
+  top: -68px; left: 50%;
   transform: translateX(-50%);
   background: rgba(255,250,235,0.97);
   border: 1.5px solid #e8c46a;
@@ -134,6 +136,7 @@ html, body {
   line-height: 1.45;
 }
 #bubble.show { opacity: 1; }
+/* 气泡尾巴朝下 */
 #bubble::after {
   content:''; position:absolute;
   bottom:-8px; left:50%; transform:translateX(-50%);
