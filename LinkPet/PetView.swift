@@ -217,13 +217,4 @@ struct FootprintView: View {
     }
 }
 
-// MARK: - ViewModel 公开方法补充
-extension PetViewModel {
-    func startDancing() {
-        state = .dancing
-        showSpeech("🎵 跳个舞～")
-        DispatchQueue.main.asyncAfter(deadline: .now() + 4.0) { [weak self] in
-            if self?.state == .dancing { self?.state = .idle }
-        }
-    }
-}
+

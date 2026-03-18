@@ -244,7 +244,7 @@ class PetViewModel: ObservableObject {
 
     func onDrag(to point: CGPoint) {
         position = point
-        if state == .sleeping || state == .sitting { setState(.idle) }
+        if state == .sleeping || state == .sit { setState(.idle) }
         showSpeech("呀！飞起来了！")
     }
 
@@ -257,9 +257,4 @@ class PetViewModel: ObservableObject {
         let f = String(repeating: "🍯", count: max(1, (100 - hunger) / 20))
         return "开心: \(h)\n饱腹: \(f)"
     }
-}
-
-// 为了编译不报错
-extension PetState {
-    var sitting: Bool { self == .sit }
 }

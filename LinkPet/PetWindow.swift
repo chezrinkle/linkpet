@@ -83,11 +83,6 @@ class PetWindow: NSWindow {
 
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
-
-    // 确保窗口能接收鼠标事件
-    override func hitTest(_ point: NSPoint) -> NSView? {
-        return self.contentView?.hitTest(point)
-    }
 }
 
 
