@@ -15,7 +15,7 @@ class PetWindowV3: NSWindow, WKNavigationDelegate, WKScriptMessageHandler {
 
     init() {
         super.init(
-            contentRect: NSRect(x: 0, y: 0, width: 200, height: 260),
+            contentRect: NSRect(x: 0, y: 0, width: 200, height: 280),
             styleMask: [.borderless],
             backing: .buffered,
             defer: false
@@ -91,6 +91,7 @@ class PetWindowV3: NSWindow, WKNavigationDelegate, WKScriptMessageHandler {
         let menu = NSMenu()
         menu.addItem(withTitle: "🔮 求签（消耗50福气）", action: #selector(doFortune), keyEquivalent: "")
         menu.addItem(withTitle: "🍬 喂零食（+20福气）", action: #selector(doFeed), keyEquivalent: "")
+        menu.addItem(withTitle: "🎀 换装衣橱", action: #selector(doWardrobe), keyEquivalent: "")
         menu.addItem(NSMenuItem.separator())
         menu.addItem(withTitle: "❌ 退出 LinkPet", action: #selector(doQuit), keyEquivalent: "")
         for item in menu.items { item.target = self }
@@ -102,6 +103,9 @@ class PetWindowV3: NSWindow, WKNavigationDelegate, WKScriptMessageHandler {
     }
     @objc func doFeed() {
         webView.evaluateJavaScript("doFeed()", completionHandler: nil)
+    }
+    @objc func doWardrobe() {
+        webView.evaluateJavaScript("openWardrobe()", completionHandler: nil)
     }
     @objc func doQuit() {
         NSApplication.shared.terminate(nil)
