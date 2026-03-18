@@ -37,7 +37,6 @@ class PetWindowV3: NSWindow, WKNavigationDelegate, WKScriptMessageHandler {
 
     private func placeOnScreen() {
         guard let screen = NSScreen.main else { return }
-        // 右侧 1/4 位置
         let x = screen.frame.width - 220
         let y = screen.frame.height * 0.3
         self.setFrameOrigin(NSPoint(x: x, y: y))
@@ -45,7 +44,6 @@ class PetWindowV3: NSWindow, WKNavigationDelegate, WKScriptMessageHandler {
 
     private func setupWebView() {
         let config = WKWebViewConfiguration()
-        // 使用持久化 dataStore，确保 localStorage 重启后不丢失
         config.websiteDataStore = WKWebsiteDataStore.default()
         let ucc = WKUserContentController()
         ucc.add(self, name: "petBridge")
@@ -75,7 +73,6 @@ class PetWindowV3: NSWindow, WKNavigationDelegate, WKScriptMessageHandler {
         case "showMenu":
             showContextMenu()
         case "dance":
-            // 跳舞时窗口轻微移动
             startDanceWiggle()
         default:
             break
@@ -89,14 +86,24 @@ class PetWindowV3: NSWindow, WKNavigationDelegate, WKScriptMessageHandler {
         }
     }
 
+    // MARK: - 恶作剧消息
+    func showChaosMessage(_ text: String) {
+        let escaped = text
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "'", with: "\\'")
+            .replacingOccurrences(of: "\n", with: "\\n")
+        DispatchQueue.main.async { [weak self] in
+            self?.webView.evaluateJavaScript("showBubble('\(escaped)', 3500)", completionHandler: nil)
+        }
+    }
+
     // MARK: - 跳舞摇摆窗口
     private func startDanceWiggle() {
         let origin = self.frame.origin
-        let offsets: [CGFloat] = [8, -8, 6, -6, 4, -4, 0]
+        let offsets: [CGFloat] = [8, -8, 6, -6, 4, -4, 2, -2, 0]
         for (i, dx) in offsets.enumerated() {
-            DispatchQueue.main.asyncAfter(deadline: .now() + Double(i) * 0.12) { [weak self] in
-                guard let self = self else { return }
-                self.setFrameOrigin(NSPoint(x: origin.x + dx, y: origin.y))
+            DispatchQueue.main.asyncAfter(deadline: .now() + Double(i) * 0.11) { [weak self] in
+                self?.setFrameOrigin(NSPoint(x: origin.x + dx, y: origin.y))
             }
         }
     }
@@ -109,6 +116,8 @@ class PetWindowV3: NSWindow, WKNavigationDelegate, WKScriptMessageHandler {
         menu.addItem(withTitle: "💃 跳舞", action: #selector(doDance), keyEquivalent: "")
         menu.addItem(withTitle: "🎀 换装衣橱", action: #selector(doWardrobe), keyEquivalent: "")
         menu.addItem(withTitle: "📜 查看签文历史", action: #selector(doHistory), keyEquivalent: "")
+        menu.addItem(NSMenuItem.separator())
+        menu.addItem(withTitle: "😈 立刻整蛊！", action: #selector(doChaosNow), keyEquivalent: "")
         menu.addItem(NSMenuItem.separator())
         let autoTitle = isAutoLaunch ? "✅ 开机自启（已开启）" : "🔲 开机自启（已关闭）"
         menu.addItem(withTitle: autoTitle, action: #selector(toggleAutoLaunch), keyEquivalent: "")
@@ -124,19 +133,21 @@ class PetWindowV3: NSWindow, WKNavigationDelegate, WKScriptMessageHandler {
     @objc func doWardrobe() { webView.evaluateJavaScript("openWardrobe()", completionHandler: nil) }
     @objc func doHistory()  { webView.evaluateJavaScript("showFortuneHistory()", completionHandler: nil) }
 
+    @objc func doChaosNow() {
+        if let delegate = NSApplication.shared.delegate as? AppDelegate {
+            delegate.chaosEngine.triggerChaosNow()
+        }
+    }
+
     @objc func toggleAutoLaunch() {
         isAutoLaunch = !isAutoLaunch
         if #available(macOS 13.0, *) {
             do {
-                if isAutoLaunch {
-                    try SMAppService.mainApp.register()
-                } else {
-                    try SMAppService.mainApp.unregister()
-                }
-            } catch { }
+                if isAutoLaunch { try SMAppService.mainApp.register() }
+                else { try SMAppService.mainApp.unregister() }
+            } catch {}
         }
         let msg = isAutoLaunch ? "开机自启已开启！" : "开机自启已关闭"
-        // 转义单引号防止 JS 注入崩溃
         let escaped = msg.replacingOccurrences(of: "'", with: "\\'")
         webView.evaluateJavaScript("showBubble('\(escaped)', 2500)", completionHandler: nil)
     }

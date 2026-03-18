@@ -11,6 +11,7 @@
 		B002 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = A002 /* AppDelegate.swift */; };
 		B005 /* PetWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = A005 /* PetWindow.swift */; };
 		B006 /* PetHTML.swift in Sources */ = {isa = PBXBuildFile; fileRef = A006 /* PetHTML.swift */; };
+		B007 /* ChaosEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A008 /* ChaosEngine.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -20,6 +21,7 @@
 		A006 /* PetHTML.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetHTML.swift; sourceTree = "<group>"; };
 		A007 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		PROD /* LinkPet.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = LinkPet.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A008 /* ChaosEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChaosEngine.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -55,6 +57,7 @@
 				A002 /* AppDelegate.swift */,
 				A005 /* PetWindow.swift */,
 				A006 /* PetHTML.swift */,
+				A008 /* ChaosEngine.swift */,
 				A007 /* Info.plist */,
 			);
 			path = LinkPet;
@@ -128,6 +131,7 @@
 				B001 /* main.swift in Sources */,
 				B002 /* AppDelegate.swift in Sources */,
 				B005 /* PetWindow.swift in Sources */,
+				B007 /* ChaosEngine.swift in Sources */,
 				B006 /* PetHTML.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

@@ -4,22 +4,26 @@ import WebKit
 class AppDelegate: NSObject, NSApplicationDelegate {
     var petWindow: PetWindowV3!
     var keyMonitor: Any?
+    var chaosEngine: ChaosEngine!
 
     func applicationDidFinishLaunching(_ aNotification: Notification) {
         petWindow = PetWindowV3()
         petWindow.makeKeyAndOrderFront(nil)
         NSApp.setActivationPolicy(.accessory)
 
-        // 全局键盘监听（需要辅助功能权限）
         setupKeyboardMonitor()
+
+        // 启动恶作剧引擎（30秒后开始）
+        chaosEngine = ChaosEngine(petWindow: petWindow)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 30) {
+            self.chaosEngine.start()
+        }
     }
 
     func setupKeyboardMonitor() {
-        // 先尝试无需权限的 local monitor，再尝试 global
         keyMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.keyDown]) { [weak self] _ in
             self?.petWindow.onKeystroke()
         }
-        // 也监听本地（当 app 在前台时）
         NSEvent.addLocalMonitorForEvents(matching: [.keyDown]) { [weak self] event in
             self?.petWindow.onKeystroke()
             return event
