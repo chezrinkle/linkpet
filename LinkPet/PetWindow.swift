@@ -13,7 +13,7 @@ class PetWindow: NSWindow {
         self.viewModel = viewModel
 
         super.init(
-            contentRect: NSRect(x: 200, y: 200, width: 200, height: 160),
+            contentRect: NSRect(x: 200, y: 200, width: 220, height: 180),
             styleMask: [.borderless],
             backing: .buffered,
             defer: false
@@ -25,6 +25,7 @@ class PetWindow: NSWindow {
         self.hasShadow = false
         self.ignoresMouseEvents = false
         self.collectionBehavior = [.canJoinAllSpaces, .stationary]
+        self.acceptsMouseMovedEvents = true
 
         let hostingView = NSHostingView(rootView: PetView(viewModel: viewModel))
         hostingView.frame = self.contentView!.bounds
@@ -45,6 +46,7 @@ class PetWindow: NSWindow {
         self.setFrameOrigin(NSPoint(x: wx, y: wy))
     }
 
+    // MARK: - 拖动（关键修复）
     override func mouseDown(with event: NSEvent) {
         isDragging = true
         dragStartWindowPos = self.frame.origin
@@ -56,17 +58,77 @@ class PetWindow: NSWindow {
         let cur = NSEvent.mouseLocation
         let dx = cur.x - dragStartMousePos.x
         let dy = cur.y - dragStartMousePos.y
-        let newOrigin = NSPoint(x: dragStartWindowPos.x + dx, y: dragStartWindowPos.y + dy)
+        let newOrigin = NSPoint(
+            x: dragStartWindowPos.x + dx,
+            y: dragStartWindowPos.y + dy
+        )
         self.setFrameOrigin(newOrigin)
 
+        // 同步 ViewModel 坐标
         guard let screen = NSScreen.main else { return }
         let sf = screen.frame
         let cx = newOrigin.x + self.frame.width / 2
         let cy = sf.height - newOrigin.y - self.frame.height / 2
-        viewModel.onDrag(to: CGPoint(x: cx, y: cy))
+        DispatchQueue.main.async {
+            self.viewModel.position = CGPoint(x: cx, y: cy)
+        }
     }
 
-    override func mouseUp(with event: NSEvent) { isDragging = false }
+    override func mouseUp(with event: NSEvent) {
+        if isDragging {
+            isDragging = false
+            viewModel.showSpeech("呀！飞起来了！")
+        }
+    }
+
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
+
+    // 确保窗口能接收鼠标事件
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        return self.contentView?.hitTest(point)
+    }
+}
+
+
+// MARK: - 脚印窗口
+class FootprintWindow: NSWindow {
+    init(position: CGPoint) {
+        let size = CGFloat(28)
+        guard let screen = NSScreen.main else {
+            super.init(contentRect: .zero, styleMask: [.borderless], backing: .buffered, defer: false)
+            return
+        }
+        let sf = screen.frame
+        let wx = position.x - size / 2
+        let wy = sf.height - position.y - size / 2
+
+        super.init(
+            contentRect: NSRect(x: wx, y: wy, width: size, height: size),
+            styleMask: [.borderless],
+            backing: .buffered,
+            defer: false
+        )
+        self.level = .floating
+        self.isOpaque = false
+        self.backgroundColor = .clear
+        self.hasShadow = false
+        self.ignoresMouseEvents = true
+        self.collectionBehavior = [.canJoinAllSpaces, .stationary]
+
+        let hosting = NSHostingView(rootView: FootprintView())
+        hosting.frame = self.contentView!.bounds
+        self.contentView = hosting
+        self.makeKeyAndOrderFront(nil)
+    }
+
+    func fadeOut(completion: @escaping () -> Void) {
+        NSAnimationContext.runAnimationGroup({ ctx in
+            ctx.duration = 1.0
+            self.animator().alphaValue = 0
+        }, completionHandler: {
+            self.orderOut(nil)
+            completion()
+        })
+    }
 }
