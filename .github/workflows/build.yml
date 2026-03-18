@@ -1,0 +1,68 @@
+name: Build and Package LinkPet DMG
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build-dmg:
+    runs-on: macos-14   # Apple Silicon Mac runner
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_16.app
+
+      - name: Build .app
+        run: |
+          mkdir -p build
+          swiftc \
+            LinkPet/AppDelegate.swift \
+            LinkPet/PetViewModel.swift \
+            LinkPet/PetView.swift \
+            LinkPet/PetWindow.swift \
+            -o build/LinkPet_bin \
+            -sdk $(xcrun --sdk macosx --show-sdk-path) \
+            -target arm64-apple-macos13 \
+            -F $(xcrun --sdk macosx --show-sdk-path)/System/Library/Frameworks \
+            -framework AppKit \
+            -framework SwiftUI \
+            -framework Combine \
+            -parse-as-library
+
+      - name: Bundle into .app
+        run: |
+          APP=build/LinkPet.app
+          mkdir -p "$APP/Contents/MacOS"
+          mkdir -p "$APP/Contents/Resources"
+          cp build/LinkPet_bin "$APP/Contents/MacOS/LinkPet"
+          cp LinkPet/Info.plist "$APP/Contents/Info.plist"
+          chmod +x "$APP/Contents/MacOS/LinkPet"
+
+      - name: Install create-dmg
+        run: brew install create-dmg
+
+      - name: Create DMG
+        run: |
+          create-dmg \
+            --volname "LinkPet" \
+            --volicon "LinkPet/Assets.xcassets/AppIcon.appiconset/icon_512x512.png" 2>/dev/null || true \
+            --window-pos 200 120 \
+            --window-size 600 400 \
+            --icon-size 100 \
+            --icon "LinkPet.app" 175 190 \
+            --hide-extension "LinkPet.app" \
+            --app-drop-link 425 190 \
+            "LinkPet.dmg" \
+            "build/" || \
+          hdiutil create -volname "LinkPet" -srcfolder build/LinkPet.app -ov -format UDZO LinkPet.dmg
+
+      - name: Upload DMG artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: LinkPet-dmg
+          path: LinkPet.dmg
+          retention-days: 7
