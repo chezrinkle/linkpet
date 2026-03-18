@@ -1,19 +1,16 @@
 import AppKit
-import SwiftUI
-import Combine
+import WebKit
 
-class PetWindow: NSWindow {
-    private var viewModel: PetViewModel
-    private var isDragging = false
-    private var dragStartWindowPos: CGPoint = .zero
-    private var dragStartMousePos: CGPoint = .zero
-    private var cancellables = Set<AnyCancellable>()
+class PetWindowLive2D: NSWindow, WKNavigationDelegate, WKUIDelegate {
+    var webView: WKWebView!
+    var isDragging = false
+    var dragStartWindowPos: CGPoint = .zero
+    var dragStartMousePos: CGPoint = .zero
 
-    init(viewModel: PetViewModel) {
-        self.viewModel = viewModel
-
+    init() {
+        let size = NSRect(x: 0, y: 0, width: 280, height: 340)
         super.init(
-            contentRect: NSRect(x: 200, y: 200, width: 220, height: 180),
+            contentRect: size,
             styleMask: [.borderless],
             backing: .buffered,
             defer: false
@@ -25,32 +22,52 @@ class PetWindow: NSWindow {
         self.hasShadow = false
         self.ignoresMouseEvents = false
         self.collectionBehavior = [.canJoinAllSpaces, .stationary]
-        self.acceptsMouseMovedEvents = true
 
-        let hostingView = NSHostingView(rootView: PetView(viewModel: viewModel))
-        hostingView.frame = self.contentView!.bounds
-        hostingView.autoresizingMask = [.width, .height]
-        self.contentView = hostingView
+        setupWebView()
 
-        viewModel.$position
-            .receive(on: RunLoop.main)
-            .sink { [weak self] pos in self?.updateWindowPosition(to: pos) }
-            .store(in: &cancellables)
+        // 居中显示
+        if let screen = NSScreen.main {
+            let sx = screen.frame.width / 2 - 140
+            let sy = screen.frame.height / 2 - 170
+            self.setFrameOrigin(NSPoint(x: sx, y: sy))
+        }
     }
 
-    private func updateWindowPosition(to pos: CGPoint) {
-        guard let screen = NSScreen.main else { return }
-        let sf = screen.frame
-        let wx = pos.x - self.frame.width / 2
-        let wy = sf.height - pos.y - self.frame.height / 2
-        self.setFrameOrigin(NSPoint(x: wx, y: wy))
+    private func setupWebView() {
+        let config = WKWebViewConfiguration()
+        config.preferences.setValue(true, forKey: "developerExtrasEnabled")
+
+        // 允许本地资源
+        let prefs = WKWebpagePreferences()
+        prefs.allowsContentJavaScript = true
+        config.defaultWebpagePreferences = prefs
+
+        webView = WKWebView(frame: self.contentView!.bounds, configuration: config)
+        webView.autoresizingMask = [.width, .height]
+        webView.navigationDelegate = self
+        webView.uiDelegate = self
+        webView.setValue(false, forKey: "drawsBackground")  // 透明背景
+
+        self.contentView = webView
+
+        // 加载 HTML
+        if let htmlURL = Bundle.main.url(forResource: "pet", withExtension: "html") {
+            webView.loadFileURL(htmlURL, allowingReadAccessTo: htmlURL.deletingLastPathComponent())
+        } else {
+            // fallback: load from string
+            webView.loadHTMLString(buildHTML(), baseURL: nil)
+        }
     }
 
-    // MARK: - 拖动（关键修复）
+    // MARK: - 拖动
     override func mouseDown(with event: NSEvent) {
-        isDragging = true
-        dragStartWindowPos = self.frame.origin
-        dragStartMousePos = NSEvent.mouseLocation
+        // 如果点击在 webview 的上半部分（宠物身体），开始拖动
+        let loc = event.locationInWindow
+        if loc.y > 60 {
+            isDragging = true
+            dragStartWindowPos = self.frame.origin
+            dragStartMousePos = NSEvent.mouseLocation
+        }
     }
 
     override func mouseDragged(with event: NSEvent) {
@@ -58,72 +75,21 @@ class PetWindow: NSWindow {
         let cur = NSEvent.mouseLocation
         let dx = cur.x - dragStartMousePos.x
         let dy = cur.y - dragStartMousePos.y
-        let newOrigin = NSPoint(
+        self.setFrameOrigin(NSPoint(
             x: dragStartWindowPos.x + dx,
             y: dragStartWindowPos.y + dy
-        )
-        self.setFrameOrigin(newOrigin)
-
-        // 同步 ViewModel 坐标
-        guard let screen = NSScreen.main else { return }
-        let sf = screen.frame
-        let cx = newOrigin.x + self.frame.width / 2
-        let cy = sf.height - newOrigin.y - self.frame.height / 2
-        DispatchQueue.main.async {
-            self.viewModel.position = CGPoint(x: cx, y: cy)
-        }
+        ))
     }
 
     override func mouseUp(with event: NSEvent) {
-        if isDragging {
-            isDragging = false
-            viewModel.showSpeech("呀！飞起来了！")
-        }
+        isDragging = false
     }
 
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
-}
 
-
-// MARK: - 脚印窗口
-class FootprintWindow: NSWindow {
-    init(position: CGPoint) {
-        let size = CGFloat(28)
-        guard let screen = NSScreen.main else {
-            super.init(contentRect: .zero, styleMask: [.borderless], backing: .buffered, defer: false)
-            return
-        }
-        let sf = screen.frame
-        let wx = position.x - size / 2
-        let wy = sf.height - position.y - size / 2
-
-        super.init(
-            contentRect: NSRect(x: wx, y: wy, width: size, height: size),
-            styleMask: [.borderless],
-            backing: .buffered,
-            defer: false
-        )
-        self.level = .floating
-        self.isOpaque = false
-        self.backgroundColor = .clear
-        self.hasShadow = false
-        self.ignoresMouseEvents = true
-        self.collectionBehavior = [.canJoinAllSpaces, .stationary]
-
-        let hosting = NSHostingView(rootView: FootprintView())
-        hosting.frame = self.contentView!.bounds
-        self.contentView = hosting
-        self.makeKeyAndOrderFront(nil)
-    }
-
-    func fadeOut(completion: @escaping () -> Void) {
-        NSAnimationContext.runAnimationGroup({ ctx in
-            ctx.duration = 1.0
-            self.animator().alphaValue = 0
-        }, completionHandler: {
-            self.orderOut(nil)
-            completion()
-        })
+    // MARK: - 内联 HTML (fallback)
+    func buildHTML() -> String {
+        return petHTML()
     }
 }
