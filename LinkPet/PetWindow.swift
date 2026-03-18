@@ -1,21 +1,25 @@
 import AppKit
 import WebKit
 
-class PetWindowLive2D: NSWindow, WKNavigationDelegate, WKUIDelegate {
+class PetWindowV3: NSWindow, WKNavigationDelegate, WKScriptMessageHandler {
     var webView: WKWebView!
     var isDragging = false
     var dragStartWindowPos: CGPoint = .zero
     var dragStartMousePos: CGPoint = .zero
 
+    // 持久化 karma
+    var karma: Int {
+        get { UserDefaults.standard.integer(forKey: "linkpet_karma") }
+        set { UserDefaults.standard.set(newValue, forKey: "linkpet_karma") }
+    }
+
     init() {
-        let size = NSRect(x: 0, y: 0, width: 280, height: 340)
         super.init(
-            contentRect: size,
+            contentRect: NSRect(x: 0, y: 0, width: 200, height: 260),
             styleMask: [.borderless],
             backing: .buffered,
             defer: false
         )
-
         self.level = .floating
         self.isOpaque = false
         self.backgroundColor = .clear
@@ -24,20 +28,24 @@ class PetWindowLive2D: NSWindow, WKNavigationDelegate, WKUIDelegate {
         self.collectionBehavior = [.canJoinAllSpaces, .stationary]
 
         setupWebView()
+        centerOnScreen()
+    }
 
-        // 居中显示
+    private func centerOnScreen() {
         if let screen = NSScreen.main {
-            let sx = screen.frame.width / 2 - 140
-            let sy = screen.frame.height / 2 - 170
+            let sx = screen.frame.width - 220
+            let sy = screen.frame.height / 2 - 130
             self.setFrameOrigin(NSPoint(x: sx, y: sy))
         }
     }
 
     private func setupWebView() {
         let config = WKWebViewConfiguration()
-        config.preferences.setValue(true, forKey: "developerExtrasEnabled")
+        let userContentController = WKUserContentController()
+        // JS -> Swift 消息桥
+        userContentController.add(self, name: "petBridge")
+        config.userContentController = userContentController
 
-        // 允许本地资源
         let prefs = WKWebpagePreferences()
         prefs.allowsContentJavaScript = true
         config.defaultWebpagePreferences = prefs
@@ -45,25 +53,64 @@ class PetWindowLive2D: NSWindow, WKNavigationDelegate, WKUIDelegate {
         webView = WKWebView(frame: self.contentView!.bounds, configuration: config)
         webView.autoresizingMask = [.width, .height]
         webView.navigationDelegate = self
-        webView.uiDelegate = self
-        webView.setValue(false, forKey: "drawsBackground")  // 透明背景
-
+        webView.setValue(false, forKey: "drawsBackground")
         self.contentView = webView
 
-        // 加载 HTML
-        if let htmlURL = Bundle.main.url(forResource: "pet", withExtension: "html") {
-            webView.loadFileURL(htmlURL, allowingReadAccessTo: htmlURL.deletingLastPathComponent())
-        } else {
-            // fallback: load from string
-            webView.loadHTMLString(buildHTML(), baseURL: nil)
+        // 传入初始 karma
+        let html = buildPetHTML(initialKarma: karma)
+        webView.loadHTMLString(html, baseURL: nil)
+    }
+
+    // MARK: - JS 消息处理
+    func userContentController(_ userContentController: WKUserContentController,
+                                didReceive message: WKScriptMessage) {
+        guard let body = message.body as? [String: Any] else { return }
+        let action = body["action"] as? String ?? ""
+
+        switch action {
+        case "saveKarma":
+            if let k = body["karma"] as? Int { karma = k }
+        case "quit":
+            NSApplication.shared.terminate(nil)
+        case "showMenu":
+            showContextMenu()
+        default:
+            break
         }
+    }
+
+    // MARK: - 键击 → JS
+    func onKeystroke() {
+        DispatchQueue.main.async { [weak self] in
+            self?.webView.evaluateJavaScript("onKeystroke()", completionHandler: nil)
+        }
+    }
+
+    // MARK: - 右键菜单
+    private func showContextMenu() {
+        let menu = NSMenu()
+        menu.addItem(withTitle: "🔮 求签（消耗50福气）", action: #selector(doFortune), keyEquivalent: "")
+        menu.addItem(withTitle: "🍬 喂零食（+20福气）", action: #selector(doFeed), keyEquivalent: "")
+        menu.addItem(NSMenuItem.separator())
+        menu.addItem(withTitle: "❌ 退出 LinkPet", action: #selector(doQuit), keyEquivalent: "")
+        for item in menu.items { item.target = self }
+        menu.popUp(positioning: nil, at: NSEvent.mouseLocation, in: nil)
+    }
+
+    @objc func doFortune() {
+        webView.evaluateJavaScript("doFortune()", completionHandler: nil)
+    }
+    @objc func doFeed() {
+        webView.evaluateJavaScript("doFeed()", completionHandler: nil)
+    }
+    @objc func doQuit() {
+        NSApplication.shared.terminate(nil)
     }
 
     // MARK: - 拖动
     override func mouseDown(with event: NSEvent) {
-        // 如果点击在 webview 的上半部分（宠物身体），开始拖动
         let loc = event.locationInWindow
-        if loc.y > 60 {
+        if loc.y > 50 {
             isDragging = true
             dragStartWindowPos = self.frame.origin
             dragStartMousePos = NSEvent.mouseLocation
@@ -87,9 +134,4 @@ class PetWindowLive2D: NSWindow, WKNavigationDelegate, WKUIDelegate {
 
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
-
-    // MARK: - 内联 HTML (fallback)
-    func buildHTML() -> String {
-        return petHTML()
-    }
 }
