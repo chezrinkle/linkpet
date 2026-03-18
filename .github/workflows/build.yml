@@ -13,41 +13,37 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Build .app
+      - name: Build with xcodebuild
         run: |
-          mkdir -p build
-          SDK=$(xcrun --sdk macosx --show-sdk-path)
-          swiftc \
-            LinkPet/main.swift \
-            LinkPet/AppDelegate.swift \
-            LinkPet/PetViewModel.swift \
-            LinkPet/PetView.swift \
-            LinkPet/PetWindow.swift \
-            -o build/LinkPet_bin \
-            -sdk "$SDK" \
-            -target arm64-apple-macos13 \
-            -framework AppKit \
-            -framework SwiftUI \
-            -framework Combine
-          echo "Build succeeded!"
+          xcodebuild \
+            -project LinkPet.xcodeproj \
+            -scheme LinkPet \
+            -configuration Release \
+            -derivedDataPath build \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            ONLY_ACTIVE_ARCH=NO \
+            clean build
+          echo "Build complete"
+          find build -name "LinkPet.app" -type d | head -5
 
-      - name: Bundle into .app
+      - name: Locate app and create DMG
         run: |
-          APP=build/LinkPet.app
-          mkdir -p "$APP/Contents/MacOS"
-          mkdir -p "$APP/Contents/Resources"
-          cp build/LinkPet_bin "$APP/Contents/MacOS/LinkPet"
-          cp LinkPet/Info.plist "$APP/Contents/Info.plist"
-          chmod +x "$APP/Contents/MacOS/LinkPet"
-
-      - name: Create DMG
-        run: |
+          APP_PATH=$(find build -name "LinkPet.app" -type d | head -1)
+          echo "Found app at: $APP_PATH"
+          
+          # Remove quarantine
+          xattr -cr "$APP_PATH" || true
+          
+          # Create DMG
           hdiutil create \
             -volname "LinkPet" \
-            -srcfolder build/LinkPet.app \
+            -srcfolder "$APP_PATH" \
             -ov \
             -format UDZO \
             LinkPet.dmg
+          
           ls -lh LinkPet.dmg
 
       - name: Upload DMG
@@ -55,4 +51,4 @@ jobs:
         with:
           name: LinkPet-dmg
           path: LinkPet.dmg
-          retention-days: 7
+          retention-days: 14
