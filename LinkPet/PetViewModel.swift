@@ -199,7 +199,7 @@ class PetViewModel: ObservableObject {
         }
     }
 
-    private func startDancing() {
+    func startDancing() {
         setState(.dancing)
         showSpeech("🎵 跳个舞～")
         DispatchQueue.main.asyncAfter(deadline: .now() + 4.0) { [weak self] in
