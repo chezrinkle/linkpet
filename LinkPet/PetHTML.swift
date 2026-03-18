@@ -72,9 +72,10 @@ html, body {
   50%      { transform: scaleY(1.025); }
 }
 
-/* 跳舞整体弹跳 */
+/* 跳舞整体弹跳 — 用wrapper避免和triggerHappy的transform冲突 */
 #cat-svg.dancing {
   animation: bounce 0.4s ease-in-out infinite;
+  transform-origin: center bottom;
 }
 @keyframes bounce {
   0%,100% { transform: translateY(0); }
@@ -711,7 +712,7 @@ function startBlink() {
   function doBlink() {
     const lw = document.getElementById('eye-left-white');
     const rw = document.getElementById('eye-right-white');
-    if (lw && rw && !document.getElementById('focus-eyes').style.display === 'none') {
+    if (lw && rw && document.getElementById('focus-eyes').style.display === 'none') {
       const cur_ry = parseFloat(lw.getAttribute('ry'));
       lw.setAttribute('ry','1'); rw.setAttribute('ry','1');
       setTimeout(function(){ lw.setAttribute('ry', cur_ry||'9'); rw.setAttribute('ry', cur_ry||'9'); }, 110);

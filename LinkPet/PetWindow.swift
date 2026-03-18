@@ -45,6 +45,8 @@ class PetWindowV3: NSWindow, WKNavigationDelegate, WKScriptMessageHandler {
 
     private func setupWebView() {
         let config = WKWebViewConfiguration()
+        // 使用持久化 dataStore，确保 localStorage 重启后不丢失
+        config.websiteDataStore = WKWebsiteDataStore.default()
         let ucc = WKUserContentController()
         ucc.add(self, name: "petBridge")
         config.userContentController = ucc
@@ -124,7 +126,6 @@ class PetWindowV3: NSWindow, WKNavigationDelegate, WKScriptMessageHandler {
 
     @objc func toggleAutoLaunch() {
         isAutoLaunch = !isAutoLaunch
-        // macOS 13+ SMAppService
         if #available(macOS 13.0, *) {
             do {
                 if isAutoLaunch {
@@ -132,12 +133,12 @@ class PetWindowV3: NSWindow, WKNavigationDelegate, WKScriptMessageHandler {
                 } else {
                     try SMAppService.mainApp.unregister()
                 }
-            } catch {
-                // 静默失败（沙盒限制时）
-            }
+            } catch { }
         }
         let msg = isAutoLaunch ? "开机自启已开启！" : "开机自启已关闭"
-        webView.evaluateJavaScript("showBubble('\(msg)', 2500)", completionHandler: nil)
+        // 转义单引号防止 JS 注入崩溃
+        let escaped = msg.replacingOccurrences(of: "'", with: "\\'")
+        webView.evaluateJavaScript("showBubble('\(escaped)', 2500)", completionHandler: nil)
     }
 
     @objc func doQuit() { NSApplication.shared.terminate(nil) }
