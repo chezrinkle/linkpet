@@ -2,7 +2,7 @@ import AppKit
 import WebKit
 import ServiceManagement
 
-// Fix-E: 用 WeakScriptHandler 打破 WKUserContentController → self 的 retain cycle
+// MARK: - WeakScriptHandler（防 retain cycle）
 private class WeakScriptHandler: NSObject, WKScriptMessageHandler {
     weak var delegate: WKScriptMessageHandler?
     init(_ delegate: WKScriptMessageHandler) { self.delegate = delegate }
@@ -11,8 +11,48 @@ private class WeakScriptHandler: NSObject, WKScriptMessageHandler {
     }
 }
 
+// MARK: - 核心修复：拖动容器视图
+// WKWebView 作为 contentView 会完全消费鼠标事件，NSWindow 的 mouseDown 收不到。
+// 用 DragContainerView 作为 contentView，WKWebView 作为子视图，
+// 在 DragContainerView 层面拦截拖动事件再转发给 window。
+class DragContainerView: NSView {
+    weak var petWindow: PetWindowV3?
+
+    // 底部面板高度（72px），只有猫咪区域可拖动
+    private let dragThresholdY: CGFloat = 72
+
+    override func mouseDown(with event: NSEvent) {
+        let loc = convert(event.locationInWindow, from: nil)
+        if loc.y > dragThresholdY {
+            petWindow?.beginDrag(event)
+        } else {
+            // 底部面板区域，正常传递给子视图
+            super.mouseDown(with: event)
+        }
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        if petWindow?.isDragging == true {
+            petWindow?.continueDrag(event)
+        } else {
+            super.mouseDragged(with: event)
+        }
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        petWindow?.endDrag()
+        super.mouseUp(with: event)
+    }
+
+    // 接受第一响应者，确保事件能到达这里
+    override var acceptsFirstResponder: Bool { true }
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+}
+
+// MARK: - 主窗口
 class PetWindowV3: NSWindow, WKNavigationDelegate, WKScriptMessageHandler {
     var webView: WKWebView!
+    var containerView: DragContainerView!
     var isDragging = false
     var dragStartWindowPos: CGPoint = .zero
     var dragStartMousePos: CGPoint = .zero
@@ -21,7 +61,6 @@ class PetWindowV3: NSWindow, WKNavigationDelegate, WKScriptMessageHandler {
         get { UserDefaults.standard.integer(forKey: "linkpet_karma") }
         set { UserDefaults.standard.set(newValue, forKey: "linkpet_karma") }
     }
-
     var isAutoLaunch: Bool {
         get { UserDefaults.standard.bool(forKey: "linkpet_autolaunch") }
         set { UserDefaults.standard.set(newValue, forKey: "linkpet_autolaunch") }
@@ -39,9 +78,8 @@ class PetWindowV3: NSWindow, WKNavigationDelegate, WKScriptMessageHandler {
         self.backgroundColor = .clear
         self.hasShadow = false
         self.ignoresMouseEvents = false
-        // Fix-Bug9: 移除 .stationary，保留拖动能力
         self.collectionBehavior = [.canJoinAllSpaces]
-        setupWebView()
+        setupViews()
         placeOnScreen()
     }
 
@@ -52,29 +90,58 @@ class PetWindowV3: NSWindow, WKNavigationDelegate, WKScriptMessageHandler {
         self.setFrameOrigin(NSPoint(x: x, y: y))
     }
 
-    private func setupWebView() {
+    private func setupViews() {
+        let winFrame = NSRect(x: 0, y: 0, width: 200, height: 300)
+
+        // 1. 容器视图作为 contentView
+        containerView = DragContainerView(frame: winFrame)
+        containerView.petWindow = self
+        containerView.autoresizingMask = [.width, .height]
+        containerView.wantsLayer = true
+        containerView.layer?.backgroundColor = NSColor.clear.cgColor
+        self.contentView = containerView
+
+        // 2. WKWebView 作为子视图（不再是 contentView）
         let config = WKWebViewConfiguration()
         config.websiteDataStore = WKWebsiteDataStore.default()
         let ucc = WKUserContentController()
-        // Fix-E: 用 WeakScriptHandler 避免 retain cycle
         ucc.add(WeakScriptHandler(self), name: "petBridge")
         config.userContentController = ucc
-
         let prefs = WKWebpagePreferences()
         prefs.allowsContentJavaScript = true
         config.defaultWebpagePreferences = prefs
 
-        // 安全解包 contentView，避免强解包崩溃
-        let frame = self.contentView?.bounds ?? NSRect(x: 0, y: 0, width: 200, height: 300)
-        webView = WKWebView(frame: frame, configuration: config)
+        webView = WKWebView(frame: winFrame, configuration: config)
         webView.autoresizingMask = [.width, .height]
         webView.navigationDelegate = self
         webView.setValue(false, forKey: "drawsBackground")
-        self.contentView = webView
+        // 禁用 WKWebView 自身的右键菜单（我们用 NSMenu 接管）
+        webView.configuration.preferences.setValue(false, forKey: "developerExtrasEnabled")
+
+        containerView.addSubview(webView)
 
         let html = buildPetHTML(initialKarma: karma)
         let baseURL = URL(fileURLWithPath: NSHomeDirectory())
         webView.loadHTMLString(html, baseURL: baseURL)
+    }
+
+    // MARK: - 拖动（由 DragContainerView 调用）
+    func beginDrag(_ event: NSEvent) {
+        isDragging = true
+        dragStartWindowPos = self.frame.origin
+        dragStartMousePos = NSEvent.mouseLocation
+    }
+
+    func continueDrag(_ event: NSEvent) {
+        let cur = NSEvent.mouseLocation
+        self.setFrameOrigin(NSPoint(
+            x: dragStartWindowPos.x + cur.x - dragStartMousePos.x,
+            y: dragStartWindowPos.y + cur.y - dragStartMousePos.y
+        ))
+    }
+
+    func endDrag() {
+        isDragging = false
     }
 
     // MARK: - JS Bridge
@@ -111,8 +178,7 @@ class PetWindowV3: NSWindow, WKNavigationDelegate, WKScriptMessageHandler {
         }
     }
 
-    // MARK: - 跳舞摇摆窗口
-    // Fix-F: 每步重新读当前 origin，避免拖动期间 origin 已变导致窗口跳回
+    // MARK: - 跳舞摇摆
     private func startDanceWiggle() {
         let offsets: [CGFloat] = [8, -8, 6, -6, 4, -4, 2, -2, 0]
         for (i, dx) in offsets.enumerated() {
@@ -170,25 +236,6 @@ class PetWindowV3: NSWindow, WKNavigationDelegate, WKScriptMessageHandler {
 
     @objc func doQuit() { NSApplication.shared.terminate(nil) }
 
-    // MARK: - 拖动
-    override func mouseDown(with event: NSEvent) {
-        let loc = event.locationInWindow
-        // Fix-Bug10: 底部面板72px，拖动区域在 y > 72
-        if loc.y > 72 {
-            isDragging = true
-            dragStartWindowPos = self.frame.origin
-            dragStartMousePos = NSEvent.mouseLocation
-        }
-    }
-    override func mouseDragged(with event: NSEvent) {
-        guard isDragging else { return }
-        let cur = NSEvent.mouseLocation
-        self.setFrameOrigin(NSPoint(
-            x: dragStartWindowPos.x + cur.x - dragStartMousePos.x,
-            y: dragStartWindowPos.y + cur.y - dragStartMousePos.y
-        ))
-    }
-    override func mouseUp(with event: NSEvent) { isDragging = false }
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
 }
