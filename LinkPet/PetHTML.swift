@@ -115,10 +115,10 @@ html, body {
 
 /* ===== 气泡 ===== */
 #bubble {
-  position: absolute;
-  /* Fix-Bug11: 气泡放在猫咪头部上方，不被帽子遮住 */
-  top: -68px; left: 50%;
-  transform: translateX(-50%);
+  /* Fix-G: fixed定位 + 显示在窗口上方，彻底绕开 WKWebView clipBounds */
+  position: fixed;
+  bottom: 232px; left: 4px; right: 4px;
+  transform: none;
   background: rgba(255,250,235,0.97);
   border: 1.5px solid #e8c46a;
   border-radius: 14px;
@@ -129,8 +129,8 @@ html, body {
   opacity: 0;
   transition: opacity 0.3s;
   box-shadow: 0 3px 12px rgba(0,0,0,0.14);
-  z-index: 50;
-  max-width: 178px;
+  z-index: 9999;
+  max-width: 192px;
   white-space: normal;
   text-align: center;
   line-height: 1.45;
@@ -866,11 +866,16 @@ function updateKarmaDisplay() {
 }
 
 // ======= 持久化 =======
+// Fix-H: saveAll 节流——每500ms最多向 Swift 发一次 saveKarma，避免高频打字大量 bridge 调用
+var saveTimer = null;
 function saveAll() {
-  bridgePost({action:'saveKarma', karma:karma});
   setLS('lp_mood', Math.round(mood));
   setLS('lp_hat', equippedHat);
   setLS('lp_owned', JSON.stringify(ownedHats));
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(function(){
+    bridgePost({action:'saveKarma', karma:karma});
+  }, 500);
 }
 function bridgePost(obj) {
   try { window.webkit.messageHandlers.petBridge.postMessage(obj); } catch(e){}

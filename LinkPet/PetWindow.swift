@@ -2,6 +2,15 @@ import AppKit
 import WebKit
 import ServiceManagement
 
+// Fix-E: 用 WeakScriptHandler 打破 WKUserContentController → self 的 retain cycle
+private class WeakScriptHandler: NSObject, WKScriptMessageHandler {
+    weak var delegate: WKScriptMessageHandler?
+    init(_ delegate: WKScriptMessageHandler) { self.delegate = delegate }
+    func userContentController(_ ucc: WKUserContentController, didReceive message: WKScriptMessage) {
+        delegate?.userContentController(ucc, didReceive: message)
+    }
+}
+
 class PetWindowV3: NSWindow, WKNavigationDelegate, WKScriptMessageHandler {
     var webView: WKWebView!
     var isDragging = false
@@ -47,7 +56,8 @@ class PetWindowV3: NSWindow, WKNavigationDelegate, WKScriptMessageHandler {
         let config = WKWebViewConfiguration()
         config.websiteDataStore = WKWebsiteDataStore.default()
         let ucc = WKUserContentController()
-        ucc.add(self, name: "petBridge")
+        // Fix-E: 用 WeakScriptHandler 避免 retain cycle
+        ucc.add(WeakScriptHandler(self), name: "petBridge")
         config.userContentController = ucc
 
         let prefs = WKWebpagePreferences()
@@ -100,12 +110,14 @@ class PetWindowV3: NSWindow, WKNavigationDelegate, WKScriptMessageHandler {
     }
 
     // MARK: - 跳舞摇摆窗口
+    // Fix-F: 每步重新读当前 origin，避免拖动期间 origin 已变导致窗口跳回
     private func startDanceWiggle() {
-        let origin = self.frame.origin
         let offsets: [CGFloat] = [8, -8, 6, -6, 4, -4, 2, -2, 0]
         for (i, dx) in offsets.enumerated() {
             DispatchQueue.main.asyncAfter(deadline: .now() + Double(i) * 0.11) { [weak self] in
-                self?.setFrameOrigin(NSPoint(x: origin.x + dx, y: origin.y))
+                guard let self = self else { return }
+                let cur = self.frame.origin
+                self.setFrameOrigin(NSPoint(x: cur.x + dx, y: cur.y))
             }
         }
     }

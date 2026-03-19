@@ -27,6 +27,10 @@
         <key>NSAllowsArbitraryLoads</key>
         <true/>
     </dict>
+    <key>NSAppleEventsUsageDescription</key>
+    <string>LinkPet 需要控制 TextEdit 来给你写留言（整蛊功能）</string>
+    <key>NSAccessibilityUsageDescription</key>
+    <string>LinkPet 需要辅助功能权限来移动鼠标光标（整蛊功能）</string>
     <key>NSHighResolutionCapable</key>
     <true/>
     <key>NSPrincipalClass</key>

@@ -5,7 +5,6 @@ import Foundation
 class ChaosEngine {
     weak var petWindow: PetWindowV3?
     var timer: Timer?
-    // Fix-Bug8: 分开管理脚印和💩，避免互相误清
     var footprintWindows: [NSWindow] = []
     var poopWindows: [NSWindow] = []
     var isChaosActive = false
@@ -17,15 +16,25 @@ class ChaosEngine {
         self.petWindow = petWindow
     }
 
-    func start() { scheduleNext() }
-    func stop()  { timer?.invalidate(); timer = nil }
+    // Fix-B: Timer 必须在主线程 RunLoop 上调度
+    func start() {
+        DispatchQueue.main.async { self.scheduleNext() }
+    }
+    func stop() {
+        DispatchQueue.main.async {
+            self.timer?.invalidate()
+            self.timer = nil
+        }
+    }
 
     private func scheduleNext() {
+        // 已在主线程，直接用 RunLoop.main
         let delay = Double.random(in: minInterval...maxInterval)
         timer = Timer.scheduledTimer(withTimeInterval: delay, repeats: false) { [weak self] _ in
             self?.triggerRandomChaos()
             self?.scheduleNext()
         }
+        RunLoop.main.add(timer!, forMode: .common)
     }
 
     private func triggerRandomChaos() {
@@ -45,12 +54,13 @@ class ChaosEngine {
         isChaosActive = true
         petWindow?.showChaosMessage("嘻嘻，我要去溜达了～")
 
-        // Fix-Bug1: 改 let
         let startX = pet.frame.midX
         let startY = pet.frame.midY
         let targetX = CGFloat.random(in: 80...screen.frame.width - 80)
         let targetY = CGFloat.random(in: 80...screen.frame.height - 80)
+        // Fix-C: steps >= 2 才能安全做除法
         let steps = 12
+        guard steps >= 2 else { isChaosActive = false; return }
 
         for i in 0..<steps {
             let delay = Double(i) * 0.22
@@ -70,26 +80,22 @@ class ChaosEngine {
 
     private func spawnFootprint(at point: CGPoint, isRight: Bool) {
         let size: CGFloat = 28
-        let win = makeOverlayWindow(rect: NSRect(x: point.x - size/2, y: point.y - size/2,
-                                                  width: size, height: size),
-                                    ignoresMouse: true)
+        let win = makeOverlayWindow(
+            rect: NSRect(x: point.x - size/2, y: point.y - size/2, width: size, height: size),
+            ignoresMouse: true)
 
         let label = NSTextField(labelWithString: "🐾")
         label.frame = NSRect(x: 0, y: 0, width: size, height: size)
         label.font = .systemFont(ofSize: 20)
         label.alignment = .center
-        win.contentView?.addSubview(label)  // Fix-Bug2: 先 addSubview
-
-        // Fix-Bug2: 加入层级后再设 wantsLayer & transform
+        win.contentView?.addSubview(label)
         label.wantsLayer = true
-        if !isRight {
-            label.layer?.transform = CATransform3DMakeScale(-1, 1, 1)
+        if !isRight, let layer = label.layer {
+            layer.transform = CATransform3DMakeScale(-1, 1, 1)
         }
 
-        // Fix-Bug3: 用 orderFront 不抢焦点
         win.orderFront(nil)
         footprintWindows.append(win)
-
         win.alphaValue = 0
         NSAnimationContext.runAnimationGroup { ctx in
             ctx.duration = 0.3
@@ -109,7 +115,6 @@ class ChaosEngine {
         isChaosActive = true
         petWindow?.showChaosMessage("哈哈！鼠标是我的！😈")
 
-        // Fix-Bug4: corners 统一用 Cocoa 坐标（左下原点），转换统一在 warpTo() 里做
         let corners: [CGPoint] = [
             CGPoint(x: 10,                      y: 10),
             CGPoint(x: screen.frame.width - 10, y: 10),
@@ -117,9 +122,8 @@ class ChaosEngine {
             CGPoint(x: screen.frame.width - 10, y: screen.frame.height - 10),
         ]
         let target = corners.randomElement()!
-
         let steps = 20
-        let startPos = NSEvent.mouseLocation  // Cocoa 坐标
+        let startPos = NSEvent.mouseLocation  // Cocoa 坐标（左下原点）
         for i in 1...steps {
             let delay = Double(i) * 0.035
             let t = CGFloat(i) / CGFloat(steps)
@@ -129,17 +133,16 @@ class ChaosEngine {
                 ChaosEngine.warpTo(x: nx, y: ny, screenH: screen.frame.height)
             }
         }
-
         DispatchQueue.main.asyncAfter(deadline: .now() + Double(steps) * 0.035 + 2.0) { [weak self] in
             self?.petWindow?.showChaosMessage("好啦好啦，还你！😏")
-            let cx = screen.frame.width / 2
-            let cy = screen.frame.height / 2
-            ChaosEngine.warpTo(x: cx, y: cy, screenH: screen.frame.height)
+            ChaosEngine.warpTo(x: screen.frame.width / 2,
+                               y: screen.frame.height / 2,
+                               screenH: screen.frame.height)
             self?.isChaosActive = false
         }
     }
 
-    /// Fix-Bug4: 统一坐标转换：Cocoa(左下) → CG(左上)
+    /// Cocoa(左下原点) → CGWarpMouseCursorPosition(左上原点)
     private static func warpTo(x: CGFloat, y: CGFloat, screenH: CGFloat) {
         CGWarpMouseCursorPosition(CGPoint(x: x, y: screenH - y))
     }
@@ -156,8 +159,7 @@ class ChaosEngine {
             "主人！你已经工作很久了，该摸摸我了！",
             "福气值还不够！快去打字！",
         ]
-        // Fix-Bug5: 转义 AppleScript 字符串中的双引号和反斜杠
-        let raw = messages.randomElement()!
+        let raw  = messages.randomElement()!
         let safe = raw
             .replacingOccurrences(of: "\\", with: "\\\\")
             .replacingOccurrences(of: "\"", with: "\\\"")
@@ -168,12 +170,14 @@ class ChaosEngine {
                 set text of front document to "\(safe)"
             end tell
         """
-        // Fix-Bug6: 使用 executableURL 替代废弃的 launchPath
-        let task = Process()
-        task.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
-        task.arguments = ["-e", script]
-        try? task.run()
-
+        // Fix-D: 子线程跑 Process，避免卡主线程
+        DispatchQueue.global(qos: .userInitiated).async {
+            let task = Process()
+            task.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+            task.arguments = ["-e", script]
+            try? task.run()
+            task.waitUntilExit()
+        }
         DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) { [weak self] in
             self?.isChaosActive = false
         }
@@ -193,7 +197,6 @@ class ChaosEngine {
                 self?.spawnPoop(at: CGPoint(x: x, y: y))
             }
         }
-        // Fix-Bug8: 10秒后只清 poopWindows，不影响脚印
         DispatchQueue.main.asyncAfter(deadline: .now() + 10.0) { [weak self] in
             self?.clearPoops()
             self?.isChaosActive = false
@@ -202,25 +205,22 @@ class ChaosEngine {
 
     private func spawnPoop(at point: CGPoint) {
         let size: CGFloat = 36
-        let win = makeOverlayWindow(rect: NSRect(x: point.x - size/2, y: point.y - size/2,
-                                                  width: size, height: size),
-                                    ignoresMouse: false)
+        let win = makeOverlayWindow(
+            rect: NSRect(x: point.x - size/2, y: point.y - size/2, width: size, height: size),
+            ignoresMouse: false)
 
         let btn = NSButton(frame: NSRect(x: 0, y: 0, width: size, height: size))
         btn.title = "💩"
         btn.font = .systemFont(ofSize: 24)
         btn.isBordered = false
-        // Fix-Bug7: .inline 废弃，改 .shadowlessSquare
         btn.bezelStyle = .shadowlessSquare
         btn.target = self
         btn.action = #selector(poopClicked(_:))
         win.contentView?.addSubview(btn)
         objc_setAssociatedObject(btn, &AssocKey.window, win, .OBJC_ASSOCIATION_RETAIN)
 
-        // Fix-Bug3: orderFront 不抢焦点
         win.orderFront(nil)
         poopWindows.append(win)
-
         win.alphaValue = 0
         NSAnimationContext.runAnimationGroup { ctx in
             ctx.duration = 0.25
@@ -251,8 +251,7 @@ class ChaosEngine {
         triggerRandomChaos()
     }
 
-    // MARK: - 工具方法
-    /// 创建透明浮窗（Fix-Bug3: 统一不抢焦点）
+    // MARK: - 工具
     private func makeOverlayWindow(rect: NSRect, ignoresMouse: Bool) -> NSWindow {
         let win = NSWindow(contentRect: rect, styleMask: [.borderless],
                            backing: .buffered, defer: false)
