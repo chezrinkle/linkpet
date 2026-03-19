@@ -235,7 +235,8 @@ class PetWindowV3: NSWindow, WKNavigationDelegate, WKScriptMessageHandler {
         menu.addItem(makeHeader("🪟 窗口层级"))
         let topTitle = (self.level == .floating) ? "✅ 置顶显示（当前）" : "⬆️ 置顶显示"
         let normalTitle = (self.level == .normal) ? "✅ 普通层级（当前）" : "↔️ 普通层级"
-        let bottomTitle = (self.level.rawValue <= NSWindow.Level.desktopIcon.rawValue) ? "✅ 置底显示（当前）" : "⬇️ 置底显示"
+        let desktopLevel = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.desktopWindow)))
+        let bottomTitle = (self.level.rawValue <= desktopLevel.rawValue) ? "✅ 置底显示（当前）" : "⬇️ 置底显示"
         menu.addItem(withTitle: topTitle,    action: #selector(setLevelTop),    keyEquivalent: "")
         menu.addItem(withTitle: normalTitle, action: #selector(setLevelNormal), keyEquivalent: "")
         menu.addItem(withTitle: bottomTitle, action: #selector(setLevelBottom), keyEquivalent: "")
