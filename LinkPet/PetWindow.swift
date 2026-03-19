@@ -64,7 +64,9 @@ class PetWindowV3: NSWindow, WKNavigationDelegate, WKScriptMessageHandler {
         prefs.allowsContentJavaScript = true
         config.defaultWebpagePreferences = prefs
 
-        webView = WKWebView(frame: self.contentView!.bounds, configuration: config)
+        // 安全解包 contentView，避免强解包崩溃
+        let frame = self.contentView?.bounds ?? NSRect(x: 0, y: 0, width: 200, height: 300)
+        webView = WKWebView(frame: frame, configuration: config)
         webView.autoresizingMask = [.width, .height]
         webView.navigationDelegate = self
         webView.setValue(false, forKey: "drawsBackground")

@@ -34,7 +34,8 @@ class ChaosEngine {
             self?.triggerRandomChaos()
             self?.scheduleNext()
         }
-        RunLoop.main.add(timer!, forMode: .common)
+        // 安全解包，避免 timer! 强解包崩溃
+        if let t = timer { RunLoop.main.add(t, forMode: .common) }
     }
 
     private func triggerRandomChaos() {

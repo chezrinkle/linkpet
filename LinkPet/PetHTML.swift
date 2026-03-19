@@ -866,12 +866,15 @@ function updateKarmaDisplay() {
 }
 
 // ======= 持久化 =======
-// Fix-H: saveAll 节流——每500ms最多向 Swift 发一次 saveKarma，避免高频打字大量 bridge 调用
+// saveAll 节流——每500ms最多向 Swift 发一次 saveKarma，避免高频打字大量 bridge 调用
 var saveTimer = null;
 function saveAll() {
   setLS('lp_mood', Math.round(mood));
   setLS('lp_hat', equippedHat);
   setLS('lp_owned', JSON.stringify(ownedHats));
+  // fortuneHistory 和 reachedMilestones 已在各自操作时单独写入，此处确保兜底同步
+  setLS('lp_fortune_history', JSON.stringify(fortuneHistory));
+  setLS('lp_milestones', JSON.stringify(reachedMilestones));
   clearTimeout(saveTimer);
   saveTimer = setTimeout(function(){
     bridgePost({action:'saveKarma', karma:karma});
