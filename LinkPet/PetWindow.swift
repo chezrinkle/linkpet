@@ -11,26 +11,22 @@ private class WeakScriptHandler: NSObject, WKScriptMessageHandler {
     }
 }
 
-// MARK: - 核心修复：拖动容器视图
-// WKWebView 作为 contentView 会完全消费鼠标事件，NSWindow 的 mouseDown 收不到。
-// 用 DragContainerView 作为 contentView，WKWebView 作为子视图，
-// 在 DragContainerView 层面拦截拖动事件再转发给 window。
+// MARK: - 核心修复：拖动+事件容器视图
+// WKWebView 作为 contentView 会完全消费鼠标事件。
+// DragContainerView 作为 contentView，在 NSView 层拦截所有鼠标事件。
 class DragContainerView: NSView {
     weak var petWindow: PetWindowV3?
+    private let dragThresholdY: CGFloat = 72   // 底部面板高度
 
-    // 底部面板高度（72px），只有猫咪区域可拖动
-    private let dragThresholdY: CGFloat = 72
-
+    // MARK: 左键：猫身区域拖动
     override func mouseDown(with event: NSEvent) {
         let loc = convert(event.locationInWindow, from: nil)
         if loc.y > dragThresholdY {
             petWindow?.beginDrag(event)
         } else {
-            // 底部面板区域，正常传递给子视图
             super.mouseDown(with: event)
         }
     }
-
     override func mouseDragged(with event: NSEvent) {
         if petWindow?.isDragging == true {
             petWindow?.continueDrag(event)
@@ -38,15 +34,23 @@ class DragContainerView: NSView {
             super.mouseDragged(with: event)
         }
     }
-
     override func mouseUp(with event: NSEvent) {
         petWindow?.endDrag()
         super.mouseUp(with: event)
     }
 
-    // 接受第一响应者，确保事件能到达这里
+    // MARK: 右键：完全拦截，交给 PetWindow 弹菜单（绕开 WKWebView 的"重新载入"菜单）
+    override func rightMouseDown(with event: NSEvent) {
+        petWindow?.showContextMenuFromEvent(event)
+    }
+    override func rightMouseUp(with event: NSEvent) { /* 吞掉，防止 WKWebView 再处理 */ }
+
+    // MARK: 基础设置
     override var acceptsFirstResponder: Bool { true }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
+    // 返回 nil 让 WKWebView 不显示系统右键菜单
+    override func menu(for event: NSEvent) -> NSMenu? { nil }
 }
 
 // MARK: - 主窗口
@@ -115,7 +119,7 @@ class PetWindowV3: NSWindow, WKNavigationDelegate, WKScriptMessageHandler {
         webView.autoresizingMask = [.width, .height]
         webView.navigationDelegate = self
         webView.setValue(false, forKey: "drawsBackground")
-        // 禁用 WKWebView 自身的右键菜单（我们用 NSMenu 接管）
+        // 禁用 WKWebView 内建右键菜单（"重新载入"等），改由 DragContainerView 接管
         webView.configuration.preferences.setValue(false, forKey: "developerExtrasEnabled")
 
         containerView.addSubview(webView)
@@ -190,6 +194,11 @@ class PetWindowV3: NSWindow, WKNavigationDelegate, WKScriptMessageHandler {
         }
     }
 
+    // MARK: - 右键菜单入口（由 DragContainerView 调用）
+    func showContextMenuFromEvent(_ event: NSEvent) {
+        showContextMenu()
+    }
+
     // MARK: - 右键菜单（完整功能版）
     private func showContextMenu() {
         let menu = NSMenu()
@@ -219,6 +228,17 @@ class PetWindowV3: NSWindow, WKNavigationDelegate, WKScriptMessageHandler {
         menu.addItem(withTitle: "🖱️ 劫持鼠标", action: #selector(doChaosHijack), keyEquivalent: "")
         menu.addItem(withTitle: "📝 偷偷写字", action: #selector(doChaosNotepad), keyEquivalent: "")
         menu.addItem(withTitle: "💩 丢💩炸弹", action: #selector(doChaosPoop), keyEquivalent: "")
+
+        menu.addItem(NSMenuItem.separator())
+
+        // —— 窗口层级 ——
+        menu.addItem(makeHeader("🪟 窗口层级"))
+        let topTitle = (self.level == .floating) ? "✅ 置顶显示（当前）" : "⬆️ 置顶显示"
+        let normalTitle = (self.level == .normal) ? "✅ 普通层级（当前）" : "↔️ 普通层级"
+        let bottomTitle = (self.level.rawValue <= NSWindow.Level.desktopIcon.rawValue) ? "✅ 置底显示（当前）" : "⬇️ 置底显示"
+        menu.addItem(withTitle: topTitle,    action: #selector(setLevelTop),    keyEquivalent: "")
+        menu.addItem(withTitle: normalTitle, action: #selector(setLevelNormal), keyEquivalent: "")
+        menu.addItem(withTitle: bottomTitle, action: #selector(setLevelBottom), keyEquivalent: "")
 
         menu.addItem(NSMenuItem.separator())
 
@@ -267,6 +287,20 @@ class PetWindowV3: NSWindow, WKNavigationDelegate, WKScriptMessageHandler {
     }
     @objc func doChaosPoop() {
         engine?.leavePoop()
+    }
+
+    // MARK: - 窗口层级 Actions
+    @objc func setLevelTop() {
+        self.level = .floating
+        showBubble("已置顶显示 ⬆️")
+    }
+    @objc func setLevelNormal() {
+        self.level = .normal
+        showBubble("已切换普通层级 ↔️")
+    }
+    @objc func setLevelBottom() {
+        self.level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.desktopWindow)))
+        showBubble("已置底显示 ⬇️")
     }
 
     // MARK: - 设置 Actions
