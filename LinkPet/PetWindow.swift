@@ -12,8 +12,7 @@ private class WeakScriptHandler: NSObject, WKScriptMessageHandler {
 }
 
 // MARK: - 主窗口
-// WKUIDelegate 用于在 WebKit 层封掉系统右键菜单
-class PetWindowV3: NSWindow, WKNavigationDelegate, WKScriptMessageHandler, WKUIDelegate {
+class PetWindowV3: NSWindow, WKNavigationDelegate, WKScriptMessageHandler {
 
     var webView: WKWebView!
 
@@ -84,28 +83,18 @@ class PetWindowV3: NSWindow, WKNavigationDelegate, WKScriptMessageHandler, WKUID
         let prefs = WKWebpagePreferences()
         prefs.allowsContentJavaScript = true
         config.defaultWebpagePreferences = prefs
-        // developerExtras 关掉，减少系统菜单项
+        // developerExtras 关掉（"检查元素"等系统菜单项）
         config.preferences.setValue(false, forKey: "developerExtrasEnabled")
 
         let frame = NSRect(x: 0, y: 0, width: 200, height: 300)
         webView = WKWebView(frame: frame, configuration: config)
         webView.autoresizingMask = [.width, .height]
         webView.navigationDelegate = self
-        // 第2层防护——WKUIDelegate 在 WebKit 层返回 nil 禁掉系统菜单
-        webView.uiDelegate = self
         webView.setValue(false, forKey: "drawsBackground")
 
         self.contentView = webView
         webView.loadHTMLString(buildPetHTML(initialKarma: karma),
                                baseURL: URL(fileURLWithPath: NSHomeDirectory()))
-    }
-
-    // MARK: - WKUIDelegate：第2层防护——WebKit 层禁掉右键菜单
-    @available(macOS 12.0, *)
-    func webView(_ webView: WKWebView,
-                 contextMenuConfigurationForElement elementInfo: WKContextMenuElementInfo,
-                 completionHandler: @escaping (UIContextMenuConfiguration?) -> Void) {
-        completionHandler(nil)   // nil = 不显示任何菜单
     }
 
     // MARK: - 事件监听：第3层防护——Global Monitor 弹我们的菜单
